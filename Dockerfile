@@ -10,5 +10,5 @@ RUN npm install
 
 ADD nodemon.json /src/app/nodemon.json
 
-EXPOSE 8000
-CMD npm start
+EXPOSE 8081
+CMD npm run dev
