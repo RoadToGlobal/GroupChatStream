@@ -1,34 +1,110 @@
-import Express    from 'express';
-import http       from 'http';
-import socketIo   from 'socket.io';
+import Express      from 'express';
+import http         from 'http';
+import socketIo     from 'socket.io';
+import sanitizeHtml from 'sanitize-html';
 
 const app    = new Express();
 const server = http.Server(app);
 const io     = socketIo(server);
 
-const socketInRoom = new Map();
+const socketMetadata = new Map();
 
 io.on('connection', (socket) => {
   socket.on('action', (action) => {
     switch (action.type) {
       case 'server/join':
-        socketInRoom.set(socket.id, action.data);
-        socket.join(action.data);
+        if (
+          typeof(action.username) === 'string' &&
+          typeof(action.room) === 'string'
+        ) {
+          const username = sanitizeHtml(action.username);
+          const room = sanitizeHtml(action.room);
+
+          socketMetadata.set(socket.id, { username, room });
+          socket.join(room);
+
+          const otherUsers = [];
+          socketMetadata.forEach((metadata) => {
+            if (metadata.room === sanitizeHtml(action.room)) {
+              otherUsers.push(metadata.username);
+            }
+          });
+
+          socket.to(socket.id).emit('action', {
+            type: 'joinSuccess',
+            message: `joined ${room}`,
+            otherUsers
+          });
+
+          io.to(socketMetadata.get(socket.id).room).emit('action', {
+            type: 'userStatus',
+            otherUsers,
+          });
+        } else {
+          socket.to(socket.id).emit('action', {
+            type: 'error',
+            message: 'metadata error',
+          });
+        }
         break;
       case 'server/leave':
-        socketInRoom.delete(socket.id);
-        socket.leave(action.data);
+        socket.leave(action.room);
+        if ( socketMetadata.has(socket.id) && socketMetadata.get(socket.id).room === action.room ) {
+          socketMetadata.delete(socket.id);
+        }
+
+        const otherUsers = [];
+        socketMetadata.forEach((metadata) => {
+          if (metadata.room === action.room) {
+            otherUsers.push(metadata.username);
+          }
+        });
+
+        io.to(action.room).emit('action', {
+          type: 'userStatus',
+          otherUsers,
+        });
+
         break;
       case 'server/message':
-        if (socketInRoom.has(socket.id)) {
-
-          // TODO: sanitize data for gods sake!
-          io.to(socketInRoom.get(socket.id)).emit('action', {type: 'message', data: action.data});
-        } else {
-          socket.to(socket.id).emit('message', {message: 'need to join a room first'});
+        if (socketMetadata.has(socket.id) && typeof(action.message) === 'string') {
+          io.to(socketMetadata.get(socket.id).room).emit('action', {
+            type: 'message',
+            message: sanitizeHtml(action.message),
+            username: socketMetadata.get(socket.id).username,
+          });
+        } else if (!socketMetadata.has(socket.id)) {
+          socket.to(socket.id).emit('action', {
+            type: 'error',
+            message: 'need to join a room first',
+          });
+        } else if (!action.message || !action.username) {
+          socket.to(socket.id).emit('action', {
+            type: 'error',
+            message: 'supply username, and a message',
+          });
         }
         break;
       default:
+    }
+  });
+
+  socket.on('disconnect', () => {
+    if (socketMetadata.has(socket.id)) {
+      const room = socketMetadata.get(socket.id).room;
+      socketMetadata.delete(socket.id);
+
+      const otherUsers = [];
+      socketMetadata.forEach((metadata) => {
+        if (metadata.room === room) {
+          otherUsers.push(metadata.username);
+        }
+      });
+
+      io.to(room).emit('action', {
+        type: 'userStatus',
+        otherUsers,
+      });
     }
   });
 });
