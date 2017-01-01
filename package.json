@@ -4,7 +4,7 @@
   "description": "group-chat-streamer for group-app",
   "private": true,
   "scripts": {
-    "start": "nodemon -L app.js",
+    "start": "nodemon -L dist",
     "dev": "nodemon -w app --exec \"babel-node app --presets es2015,stage-0\"",
     "build": "babel app -s -D -d dist --presets es2015,stage-0",
     "prestart": "npm run -s build",
