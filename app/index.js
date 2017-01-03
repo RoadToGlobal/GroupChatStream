@@ -10,6 +10,15 @@ const io     = socketIo(server);
 const socketMetadata = new Map();
 
 io.on('connection', (socket) => {
+  socket.on('groupMaker/removedGroups', (payload) => {
+    payload.removedGroups.forEach((groupId) => {
+      io.to(groupId).emit('action', {
+        type: 'groupRemoved',
+        groupId,
+      });
+    });
+  });
+
   socket.on('action', (action) => {
     switch (action.type) {
       case 'server/join':
