@@ -10,13 +10,25 @@ const io     = socketIo(server);
 const socketMetadata = new Map();
 
 io.on('connection', (socket) => {
-  socket.on('groupMaker/removedGroups', (payload) => {
-    payload.removedGroups.forEach((groupId) => {
-      io.to(groupId).emit('action', {
-        type: 'groupRemoved',
-        groupId,
+  // notify the clients who's groups have been absorbed into other groups.
+  socket.on('groupMaker/absorbedInto', (payload) => {
+    if (payload.secret === 'super secret string to validate communication between containers, Huzzah! a;lkjfie3ncsvck' ) {
+      const absorbedInto = new Map(payload.absorbedInto);
+
+      absorbedInto.forEach((absorber, absorbeeId) => {
+        io.to(absorbeeId).emit('action', {
+          type: 'groupAbsorbedInto',
+          absorbeeId,
+          absorber,
+        });
+
+        io.to(absorber._id).emit('action', {
+          type: 'groupAbsorbed',
+          absorbeeId,
+          absorber,
+        });
       });
-    });
+    }
   });
 
   socket.on('action', (action) => {
